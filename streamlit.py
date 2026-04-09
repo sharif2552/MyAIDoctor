@@ -1,12 +1,14 @@
 # Minimal streamlit shim used only for local smoke tests / demo mode.
+import sys
 from contextlib import contextmanager
+
 
 class SessionState(dict):
     def __getattr__(self, name):
         try:
             return self[name]
-        except KeyError:
-            raise AttributeError(name)
+        except KeyError as exc:
+            raise AttributeError(name) from exc
 
     def __setattr__(self, name, value):
         # allow setting internal attrs
@@ -32,11 +34,11 @@ def _noop(*a, **k):
     return None
 
 
-def button(label, use_container_width=False):
+def button(label, use_container_width=False, **kwargs):
     return False
 
 
-def form_submit_button(label, use_container_width=False):
+def form_submit_button(label, use_container_width=False, **kwargs):
     # Simulate a form submit button; always return False in smoke tests
     return False
 
@@ -87,6 +89,26 @@ def cache_resource(func):
     return func
 
 
+def expander(label, expanded=False):
+    @contextmanager
+    def _ctx():
+        yield None
+
+    return _ctx()
+
+
+def code(*a, **k):
+    return None
+
+
+def caption(*a, **k):
+    return None
+
+
+def warning(*a, **k):
+    return None
+
+
 # Provide a sidebar object with context manager
 class _Sidebar:
     def __enter__(self):
@@ -98,20 +120,21 @@ class _Sidebar:
 
 sidebar = _Sidebar()
 
-
-import sys
-
 # Minimal st object alias: set attributes on this module object so `import streamlit as st` works.
 _mod = sys.modules[__name__]
-setattr(_mod, "set_page_config", set_page_config)
-setattr(_mod, "markdown", markdown)
-setattr(_mod, "button", button)
-setattr(_mod, "form", form)
-setattr(_mod, "text_area", text_area)
-setattr(_mod, "text_input", text_input)
-setattr(_mod, "columns", columns)
-setattr(_mod, "spinner", spinner)
-setattr(_mod, "rerun", rerun)
-setattr(_mod, "cache_resource", cache_resource)
-setattr(_mod, "session_state", session_state)
-setattr(_mod, "sidebar", sidebar)
+_mod.set_page_config = set_page_config
+_mod.markdown = markdown
+_mod.button = button
+_mod.form = form
+_mod.text_area = text_area
+_mod.text_input = text_input
+_mod.columns = columns
+_mod.spinner = spinner
+_mod.rerun = rerun
+_mod.cache_resource = cache_resource
+_mod.expander = expander
+_mod.code = code
+_mod.caption = caption
+_mod.warning = warning
+_mod.session_state = session_state
+_mod.sidebar = sidebar

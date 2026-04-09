@@ -3,12 +3,43 @@ MyAIDoctor — Multi-Agent Medical Diagnostic System
 Streamlit UI with premium dark medical theme.
 """
 
+import json
 import os
 import uuid
+
+from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.tools import tool
+from langsmith import traceable
+
 import streamlit as st
+from agents.researcher import firecrawl_scrape_content, run_researcher, tavily_search_results
 from dotenv import load_dotenv
+from utils.agent_utils import get_message_types, safe_json_loads, strip_json_code_fence
+from utils.llm import get_llm
+from utils.logging import get_logger
+from utils.tracing import configure_langsmith
 
 load_dotenv()
+configure_langsmith()
+
+logger = get_logger("myaidoc")
+SystemMessage, PlannerHumanMessage = get_message_types()
+
+ROUTE_OPTIONS = {"direct_answer", "tool_research", "diagnostic_flow"}
+ROUTE_PLANNER_PROMPT = """You are a routing planner for a medical assistant app.
+
+Choose exactly one route:
+- direct_answer: For brief conversational/help/memory responses that should not run tools or diagnosis.
+- tool_research: For questions requiring up-to-date facts, web/news/statistics/current events, or explicit requests to search/scrape.
+- diagnostic_flow: For symptom evaluation, medical triage, differential diagnosis, or follow-up clinical questioning.
+
+Return ONLY valid JSON:
+{
+  "route": "direct_answer|tool_research|diagnostic_flow",
+  "reply": "If route is direct_answer, put the exact user-facing reply here. Otherwise empty string.",
+  "reason": "Very short reason."
+}
+"""
 
 # ─── Page Config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -433,7 +464,12 @@ def get_graph():
 
             def stream(self, initial_state, config=None, stream_mode=None):
                 # Simulate actor -> skeptic -> report flow using local agent mocks
-                from graph.nodes import intake_node, actor_node, skeptic_node, researcher_node, report_node
+                from graph.nodes import (
+                    actor_node,
+                    intake_node,
+                    report_node,
+                    skeptic_node,
+                )
 
                 state = intake_node(initial_state)
                 yield {"intake": {"messages": [{"content": "[System] Intake complete."}]}}
@@ -592,16 +628,202 @@ def render_report(report: dict):
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+def _format_research_preview(results: list[dict]) -> str:
+    lines = []
+    for idx, item in enumerate(results[:3], 1):
+        title = item.get("title", "Source")
+        url = item.get("url", "")
+        snippet = (item.get("snippet", "") or "").replace("\n", " ")[:180]
+        lines.append(f"{idx}. {title}\n{url}\n{snippet}")
+    return "\n\n".join(lines)
+
+
+@traceable(name="RoutePlanner")
+def plan_user_route(user_message: str, prior_user_messages: list[str]) -> dict:
+    llm = get_llm(temperature=0)
+    context = "\n".join(f"- {msg}" for msg in prior_user_messages[-6:])
+    planner_input = (
+        f"User message:\n{user_message}\n\n"
+        f"Recent user context:\n{context if context else '(none)'}"
+    )
+    try:
+        response = llm.invoke(
+            [
+                SystemMessage(content=ROUTE_PLANNER_PROMPT),
+                PlannerHumanMessage(content=planner_input),
+            ]
+        )
+        parsed = safe_json_loads(strip_json_code_fence(getattr(response, "content", "")))
+        route = str(parsed.get("route", "")).strip()
+        reply = str(parsed.get("reply", "")).strip()
+        reason = str(parsed.get("reason", "")).strip()
+        if route in ROUTE_OPTIONS:
+            return {"route": route, "reply": reply, "reason": reason}
+    except Exception:
+        logger.exception("plan_user_route: planner invocation failed")
+
+    return {
+        "route": "diagnostic_flow",
+        "reply": "",
+        "reason": "fallback_diagnostic_flow",
+    }
+
+
+@traceable(name="ResearchToolCalling")
+def run_toolcalling_research(query: str) -> tuple[str, list[dict]]:
+    llm = get_llm(temperature=0.1)
+    if not hasattr(llm, "bind_tools"):
+        fallback = run_researcher(query, [], query, medical_only=False)
+        return "", fallback
+
+    @tool("tavily_search", return_direct=False)
+    def tavily_search(query: str) -> list[dict]:
+        """Search the web via Tavily and return top sources."""
+        return tavily_search_results(query=query, medical_only=False)
+
+    @tool("firecrawl_scrape", return_direct=False)
+    def firecrawl_scrape(url: str) -> str:
+        """Scrape a single URL via Firecrawl and return markdown content."""
+        return firecrawl_scrape_content(url=url)[:4000]
+
+    tools = [tavily_search, firecrawl_scrape]
+    tool_map = {t.name: t for t in tools}
+    bound_llm = llm.bind_tools(tools)
+    messages = [
+        HumanMessage(
+            content=(
+                "Use tavily_search first for this query, then optionally call firecrawl_scrape on the most relevant "
+                "source URLs. For time-sensitive outbreak/death queries, prioritize last-7-days news and official "
+                "outbreak reports before historical papers. After tool use, answer in concise plain language with key "
+                "findings and source links.\n\n"
+                f"Query: {query}"
+            )
+        )
+    ]
+
+    captured_tavily_results: list[dict] = []
+    for _ in range(5):
+        ai_msg = bound_llm.invoke(messages)
+        messages.append(ai_msg)
+        tool_calls = getattr(ai_msg, "tool_calls", []) or []
+        logger.info("run_toolcalling_research: tool_calls=%s", len(tool_calls))
+        if not tool_calls:
+            answer = str(getattr(ai_msg, "content", "") or "")
+            return answer, captured_tavily_results
+
+        for call in tool_calls:
+            name = call.get("name", "")
+            tool_obj = tool_map.get(name)
+            if not tool_obj:
+                continue
+            args = call.get("args", {}) or {}
+            result = tool_obj.invoke(args)
+            if name == "tavily_search" and isinstance(result, list) and not captured_tavily_results:
+                captured_tavily_results = result
+            messages.append(
+                ToolMessage(content=json.dumps(result, ensure_ascii=False), tool_call_id=call.get("id", ""))
+            )
+
+    fallback = run_researcher(query, [], query, medical_only=False)
+    return "", fallback
+
+
 # ─── Run Graph (streaming) ──────────────────────────────────────────────────────
 def run_graph(initial_message: str):
     """Invoke the LangGraph with the user's message and process all events."""
+    greeting = (initial_message or "").strip().lower()
+    if greeting in {"hi", "hello", "hey", "good morning", "good afternoon", "good evening"}:
+        add_message(
+            "assistant",
+            "Hello. Describe your symptoms and I will help with a structured diagnostic assessment.",
+            "system",
+        )
+        st.session_state.running = False
+        return
+    if greeting in {
+        "what can you do?",
+        "what can you do",
+        "help",
+        "how can you help?",
+        "how can you help",
+    }:
+        add_message(
+            "assistant",
+            "I can help you understand possible causes of your symptoms, ask follow-up questions, and provide a structured summary you can take to your doctor. Tell me what you are feeling, when it started, and how severe it is.",
+            "system",
+        )
+        st.session_state.running = False
+        return
+    history_question_markers = {
+        "what did i ask earlier",
+        "what are my previous questions",
+        "previous questions",
+        "what did i ask",
+        "my previous questions",
+    }
+    if any(marker in greeting for marker in history_question_markers):
+        prior_questions = [
+            m.get("content", "")
+            for m in st.session_state.messages
+            if m.get("role") == "user" and m.get("content", "").strip() and m.get("content", "").strip() != initial_message.strip()
+        ]
+        if prior_questions:
+            add_message(
+                "assistant",
+                "\n".join(f"{idx}. {q}" for idx, q in enumerate(prior_questions, 1)),
+                "system",
+            )
+        else:
+            add_message("assistant", "No previous questions found in this session.", "system")
+        st.session_state.running = False
+        return
+    prior_user_messages = [
+        m.get("content", "").strip()
+        for m in st.session_state.messages
+        if m.get("role") == "user" and m.get("content", "").strip()
+    ]
+    route_decision = plan_user_route(initial_message, prior_user_messages)
+    route = route_decision.get("route", "diagnostic_flow")
+    logger.info("run_graph: planner route=%s reason=%s", route, route_decision.get("reason", ""))
+
+    if route == "direct_answer":
+        reply = route_decision.get("reply", "").strip() or "Can you share more details so I can help better?"
+        add_message("assistant", reply, "system")
+        st.session_state.running = False
+        return
+
+    if route == "tool_research":
+        answer, results = run_toolcalling_research(initial_message)
+        if answer.strip():
+            add_message("assistant", f"[Researcher] {answer.strip()[:1200]}", "researcher")
+        if results:
+            add_message(
+                "assistant",
+                f"[Researcher] I searched the web and found {len(results)} sources for your query.",
+                "researcher",
+            )
+            add_message("assistant", _format_research_preview(results), "researcher")
+        else:
+            add_message(
+                "assistant",
+                "[Researcher] I could not retrieve sources for that query right now. Please try again.",
+                "researcher",
+            )
+        st.session_state.running = False
+        return
+
+    logger.info("run_graph: starting new run")
     graph = get_graph()
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     st.session_state.hitl_config = config
 
+    memory_context = "\n".join(
+        f"- {msg}" for msg in prior_user_messages[-8:]
+    )
+
     initial_state = {
         "messages": [{"role": "user", "content": initial_message}],
-        "symptoms": "",
+        "symptoms": f"Conversation memory:\n{memory_context}\n\nCurrent message:\n{initial_message}" if memory_context else "",
         "clarifying_questions": [],
         "user_answers": [],
         "differential_diagnosis": [],
@@ -610,6 +832,8 @@ def run_graph(initial_message: str):
         "reflection_count": 0,
         "hitl_pending": False,
         "hitl_question": "",
+        "needs_research": False,
+        "research_query": "",
         "final_report": None,
         "done": False,
     }
@@ -617,6 +841,7 @@ def run_graph(initial_message: str):
     try:
         for event in graph.stream(initial_state, config=config, stream_mode="updates"):
             for node_name, node_output in event.items():
+                logger.debug("graph event node=%s output_keys=%s", node_name, list(node_output.keys()) if isinstance(node_output, dict) else type(node_output))
                 _process_node_output(node_name, node_output)
 
                 # Check for HITL interrupt after skeptic
@@ -632,14 +857,27 @@ def run_graph(initial_message: str):
         err_str = str(exc)
         # LangGraph raises GraphInterrupt for HITL
         if "GraphInterrupt" in type(exc).__name__ or "interrupt" in err_str.lower():
+            logger.info("run_graph: HITL interrupt raised (%s)", type(exc).__name__)
             _handle_interrupt(graph, config)
         else:
             st.session_state.running = False
+            logger.exception("run_graph: unhandled exception")
             add_message("assistant", f"❌ Error: {err_str}", "system")
 
 
 def _process_node_output(node_name: str, output: dict):
     """Extract messages from a node output and add to display."""
+    if node_name == "__interrupt__":
+        logger.info("_process_node_output: received interrupt event")
+        return
+    if not isinstance(output, dict):
+        logger.warning(
+            "_process_node_output: skipping non-dict output from node=%s type=%s",
+            node_name,
+            type(output).__name__,
+        )
+        return
+
     msgs = output.get("messages", [])
     for m in msgs:
         content = m.get("content", "") if isinstance(m, dict) else str(m)
@@ -687,9 +925,10 @@ def _handle_interrupt(graph, config):
         st.session_state.waiting_for_hitl = True
         st.session_state.hitl_question = question
         st.session_state.running = False
-    except Exception as e:
+    except Exception:
+        logger.exception("_handle_interrupt: failed to extract question")
         st.session_state.running = False
-        add_message("assistant", f"Awaiting clarification from you.", "skeptic")
+        add_message("assistant", "Awaiting clarification from you.", "skeptic")
 
 
 def _finalize_from_snapshot(snapshot):
@@ -707,6 +946,7 @@ def _finalize_from_snapshot(snapshot):
 
 def resume_graph(user_answer: str):
     """Resume the graph after HITL with the user's answer."""
+    logger.info("resume_graph: resuming with user answer")
     graph = get_graph()
     config = st.session_state.hitl_config
     if not config:
@@ -727,9 +967,11 @@ def resume_graph(user_answer: str):
     except Exception as exc:
         err_str = str(exc)
         if "GraphInterrupt" in type(exc).__name__ or "interrupt" in err_str.lower():
+            logger.info("resume_graph: HITL interrupt raised (%s)", type(exc).__name__)
             _handle_interrupt(graph, config)
         else:
             st.session_state.running = False
+            logger.exception("resume_graph: unhandled exception")
             add_message("assistant", f"❌ Error during resume: {err_str}", "system")
 
 
@@ -750,6 +992,31 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Debug panel (helps diagnose "AI not responding") ──
+    with st.expander("🪲 Debug", expanded=False):
+        st.markdown(
+            f"""
+**Session flags**
+- running: `{st.session_state.get('running')}`
+- waiting_for_hitl: `{st.session_state.get('waiting_for_hitl')}`
+- session_done: `{st.session_state.get('session_done')}`
+- thread_id: `{st.session_state.get('thread_id')}`
+"""
+        )
+
+        # Show last log lines (if file exists)
+        try:
+            import os
+            log_path = os.getenv("LOG_FILE") or os.path.join("logs", "myaidoc.log")
+            if os.path.exists(log_path):
+                with open(log_path, encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()[-120:]
+                st.code("".join(lines), language="text")
+            else:
+                st.caption(f"No log file found at {log_path!r} yet.")
+        except Exception:
+            st.caption("Could not read log file.")
 
     st.markdown('<div class="sidebar-card"><h4>Agent Roles</h4>', unsafe_allow_html=True)
     st.markdown(

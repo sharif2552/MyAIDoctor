@@ -2,12 +2,12 @@
 LangGraph workflow definition for the Reflexion-based Medical Diagnostic System.
 """
 
-from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
-from graph.state import DiagnosticState
-from graph.nodes import intake_node, actor_node, skeptic_node, researcher_node, report_node
 from graph.edges import after_skeptic
+from graph.nodes import actor_node, intake_node, report_node, researcher_node, skeptic_node
+from graph.state import DiagnosticState
 
 
 def build_graph():

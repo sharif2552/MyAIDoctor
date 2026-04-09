@@ -1,0 +1,39 @@
+# VCS
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Envs / secrets
+.venv
+venv
+.env
+.env.*
+.streamlit/secrets.toml
+
+# Local shims used only for smoke tests (do not ship in containers)
+streamlit.py
+dotenv.py
+
+# Build artifacts
+build
+dist
+*.egg-info
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Tests
+htmlcov
+.coverage
+coverage.xml

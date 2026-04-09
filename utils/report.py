@@ -12,32 +12,38 @@ def build_report(
     user_answers: list[str],
     skeptic_critique: str,
 ) -> dict:
-    """
-    Assemble a professional, structured medical diagnostic report.
+    if not isinstance(symptoms, str):
+        symptoms = str(symptoms)
+    if not isinstance(differential, list):
+        differential = []
+    if not isinstance(research_results, list):
+        research_results = []
+    if not isinstance(user_answers, list):
+        user_answers = []
+    if not isinstance(skeptic_critique, str):
+        skeptic_critique = str(skeptic_critique)
 
-    Returns a dict with:
-      - summary_of_findings
-      - differential_diagnosis  (ranked, with confidence scores)
-      - evidence_log            (URLs + quotes from research)
-      - recommended_next_steps
-      - metadata                (timestamp, reflection count, etc.)
-    """
+    normalized_dx = []
+    for item in differential:
+        if not isinstance(item, dict):
+            continue
+        dx_item = dict(item)
+        dx_item["confidence"] = _to_confidence(dx_item.get("confidence", 0))
+        normalized_dx.append(dx_item)
 
-    # ── Differential: ensure sorted by confidence descending ──
-    sorted_dx = sorted(differential, key=lambda d: d.get("confidence", 0), reverse=True)
+    sorted_dx = sorted(normalized_dx, key=lambda d: d.get("confidence", 0), reverse=True)
 
-    # ── Evidence log ──
     evidence_log = []
     for r in research_results:
+        if not isinstance(r, dict):
+            continue
         entry = {
             "title": r.get("title", "Source"),
             "url": r.get("url", ""),
             "snippet": r.get("snippet", ""),
         }
-        # Extract a key quote from full_content if available
         full = r.get("full_content", "")
         if full:
-            # Find a sentence that overlaps with any condition name
             for dx in sorted_dx[:2]:
                 condition = dx.get("condition", "").lower()
                 sentences = full.split(".")
@@ -47,7 +53,6 @@ def build_report(
                         break
         evidence_log.append(entry)
 
-    # ── Summary of findings (human-readable) ──
     top = sorted_dx[0] if sorted_dx else {}
     second = sorted_dx[1] if len(sorted_dx) > 1 else {}
 
@@ -64,7 +69,6 @@ def build_report(
     if skeptic_critique:
         summary += f"Key clinical concern raised: {skeptic_critique[:200]}"
 
-    # ── Recommended next steps ──
     next_steps = _generate_next_steps(sorted_dx, user_answers)
 
     return {
@@ -86,7 +90,6 @@ def build_report(
 
 
 def _generate_next_steps(differential: list[dict], user_answers: list[str]) -> list[str]:
-    """Generate recommended next steps based on the differential."""
     steps = [
         "Schedule an appointment with your primary care physician to discuss these findings.",
         "Bring a written list of your symptoms, including when they started and any triggers.",
@@ -94,7 +97,6 @@ def _generate_next_steps(differential: list[dict], user_answers: list[str]) -> l
 
     top_conditions = [d.get("condition", "").lower() for d in differential[:3]]
 
-    # Condition-specific recommendations
     condition_advice = {
         "migraine": "Consider keeping a headache diary noting triggers, duration, and severity.",
         "hypertension": "Monitor your blood pressure at home twice daily for one week.",
@@ -118,3 +120,13 @@ def _generate_next_steps(differential: list[dict], user_answers: list[str]) -> l
     )
 
     return steps
+
+
+def _to_confidence(value: object) -> int:
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        return 0
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, int(num)))

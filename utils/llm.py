@@ -1,15 +1,20 @@
 """Shared LLM factory — uses Groq (llama-3.3-70b-versatile) with env-based key."""
 
+import json
 import os
+
 from dotenv import load_dotenv
+from utils.logging import get_logger
 
 load_dotenv()
+logger = get_logger("myaidoc.llm")
 
 
 def get_llm(temperature: float = 0.2):
-    """Return a Groq-backed ChatOpenAI-compatible LLM."""
-    # Local/demo mode: a deterministic mock LLM that returns structured JSON
-    # Useful for running the app without external API keys or SDKs.
+    if not isinstance(temperature, (int, float)):
+        temperature = 0.2
+    temperature = max(0.0, min(float(temperature), 2.0))
+
     local_demo = os.getenv("LOCAL_DEMO", "0").lower() in ("1", "true", "yes")
 
     class MockResponse:
@@ -21,8 +26,6 @@ def get_llm(temperature: float = 0.2):
             self.temperature = temperature
 
         def invoke(self, messages):
-            # messages is a list of SystemMessage / HumanMessage objects.
-            # Inspect system prompt to decide which agent is calling.
             system_txt = ""
             human_txt = ""
             try:
@@ -36,8 +39,44 @@ def get_llm(temperature: float = 0.2):
             except Exception:
                 human_txt = str(messages[-1]) if messages else ""
 
-            # Actor mock: produce a simple differential JSON
-            if "Diagnostic Lead" in system_txt or "Diagnostic Lead" in system_txt:
+            if "routing planner" in system_txt.lower():
+                query = human_txt.lower()
+                route = "diagnostic_flow"
+                reply = ""
+                if any(k in query for k in ["hi", "hello", "hey", "what can you do", "help"]):
+                    route = "direct_answer"
+                    reply = (
+                        "Hello. I can help with symptom assessment, follow-up questions, and evidence-backed summaries."
+                    )
+                elif any(
+                    k in query
+                    for k in [
+                        "search",
+                        "tavily",
+                        "firecrawl",
+                        "latest",
+                        "today",
+                        "news",
+                        "statistics",
+                        "how many",
+                    ]
+                ):
+                    route = "tool_research"
+                out = {"route": route, "reply": reply, "reason": "mock_planner"}
+                return MockResponse(content=json.dumps(out))
+
+            if "Skeptical Specialist" in system_txt or "devil's advocate" in system_txt.lower():
+                out = {
+                    "critique": "Main gap: no information about headache triggers or focal neuro deficits.",
+                    "needs_clarification": True,
+                    "clarifying_question": "Have you experienced any visual changes or weakness during the headaches?",
+                    "needs_research": False,
+                    "research_query": "",
+                    "resolved": False,
+                }
+                return MockResponse(content=json.dumps(out))
+
+            if "Diagnostic Lead" in system_txt:
                 out = {
                     "summary": "Probable migraine based on the provided symptoms.",
                     "differential_diagnosis": [
@@ -57,44 +96,47 @@ def get_llm(temperature: float = 0.2):
                         },
                     ],
                 }
-                return MockResponse(content=__import__("json").dumps(out))
+                return MockResponse(content=json.dumps(out))
 
-            # Skeptic mock: produce a critique JSON
-            if "Skeptical Specialist" in system_txt or "devil's advocate" in system_txt.lower():
-                out = {
-                    "critique": "Main gap: no information about headache triggers or focal neuro deficits.",
-                    "needs_clarification": True,
-                    "clarifying_question": "Have you experienced any visual changes or weakness during the headaches?",
-                    "needs_research": False,
-                    "research_query": "",
-                    "resolved": False,
-                }
-                return MockResponse(content=__import__("json").dumps(out))
-
-            # Default fallback: return the last human text as content
             return MockResponse(content=human_txt)
 
     if local_demo:
+        logger.info("get_llm: using LOCAL_DEMO mock provider")
         return MockLLM(temperature=temperature)
 
-    # Try real SDKs first; if not available, fall back to mock LLM
-    try:
-        from langchain_groq import ChatGroq
+    groq_key = os.getenv("GROQ_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
 
-        return ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=temperature,
-            api_key=os.getenv("GROQ_API_KEY"),
-        )
-    except Exception:
+    if groq_key:
+        try:
+            from langchain_groq import ChatGroq
+
+            logger.info("get_llm: using Groq provider")
+            return ChatGroq(
+                model="llama-3.3-70b-versatile",
+                temperature=temperature,
+            )
+        except Exception:
+            logger.exception("get_llm: failed to initialize Groq model")
+
+    if openai_key:
         try:
             from langchain_openai import ChatOpenAI
 
+            logger.info("get_llm: using OpenAI provider")
             return ChatOpenAI(
                 model="gpt-4o-mini",
                 temperature=temperature,
-                api_key=os.getenv("OPENAI_API_KEY"),
             )
         except Exception:
-            # Final fallback to MockLLM so app remains runnable in offline/demo mode.
-            return MockLLM(temperature=temperature)
+            logger.exception("get_llm: failed to initialize OpenAI model")
+
+    allow_mock = os.getenv("ALLOW_MOCK_FALLBACK", "0").lower() in ("1", "true", "yes")
+    if allow_mock:
+        logger.warning("get_llm: using mock fallback outside demo mode")
+        return MockLLM(temperature=temperature)
+
+    raise RuntimeError(
+        "No usable LLM provider configured. Set LOCAL_DEMO=1 for demo mode, "
+        "or provide GROQ_API_KEY / OPENAI_API_KEY."
+    )

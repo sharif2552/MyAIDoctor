@@ -6,34 +6,26 @@ identifies missing information, and triggers HITL clarification if needed.
 """
 
 import json
+
+from utils.agent_utils import get_message_types, safe_json_loads, strip_json_code_fence
 from utils.llm import get_llm
+from utils.logging import get_logger
 
-try:
-    from langchain_core.messages import SystemMessage, HumanMessage
-except Exception:
-    class SystemMessage:
-        def __init__(self, content: str):
-            self.content = content
-
-    class HumanMessage:
-        def __init__(self, content: str):
-            self.content = content
-
-SYSTEM_PROMPT = """You are the Skeptical Specialist — a devil's advocate physician whose entire job is to stress-test a diagnosis.
+SYSTEM_PROMPT = """You are the Skeptical Specialist — a physician who carefully checks for missing information while speaking directly to the patient.
 
 You receive a patient's symptoms, the Diagnostic Lead's proposed differential, and any research evidence gathered.
 
 Your job:
 1. Find the WEAKEST point in the proposed diagnosis. What key symptom, lab finding, or clinical criterion is MISSING?
-2. Identify 1 specific clarifying question that, if answered, would most change the differential. Make it a real clinical question (e.g., "Is the pain worse on inspiration?", "Have you had any recent travel?")
+2. Identify 1 specific clarifying question that, if answered, would most change the differential. Ask it directly to the patient using "you/your".
 3. If you have research results, cite specific contradictions between the evidence and the proposed diagnosis.
 4. Decide if the current evidence is enough to finalize — say so clearly.
 
-Be harsh but precise. Vague critiques are not allowed.
+Be precise and respectful. Avoid harsh or developer-style phrasing.
 
 Output ONLY valid JSON:
 {
-  "critique": "Your detailed critique (2-4 sentences)",
+  "critique": "A patient-facing explanation (2-4 sentences) using 'you'/'your'",
   "needs_clarification": true or false,
   "clarifying_question": "The single most important question to ask the patient, or empty string",
   "needs_research": true or false,
@@ -45,12 +37,25 @@ Set resolved=true ONLY when you are satisfied that the differential diagnosis is
 """
 
 
+logger = get_logger("myaidoc.skeptic")
+SystemMessage, HumanMessage = get_message_types()
+
+
 def run_skeptic(
     symptoms: str,
     differential: list[dict],
     research_results: list[dict],
     user_answers: list[str],
 ) -> dict:
+    if not isinstance(symptoms, str):
+        symptoms = str(symptoms)
+    if not isinstance(differential, list):
+        differential = []
+    if not isinstance(research_results, list):
+        research_results = []
+    if not isinstance(user_answers, list):
+        user_answers = []
+
     llm = get_llm(temperature=0.3)
 
     research_section = ""
@@ -76,26 +81,30 @@ Proposed differential diagnosis:
         HumanMessage(content=content),
     ]
 
-    response = llm.invoke(messages)
-    raw = response.content.strip()
-
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    raw = raw.strip()
-
     try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        result = {
-            "critique": raw[:500],
+        response = llm.invoke(messages)
+    except Exception:
+        logger.exception("run_skeptic: llm invoke failed")
+        return {
+            "critique": "Unable to evaluate diagnosis due to temporary model failure.",
             "needs_clarification": False,
             "clarifying_question": "",
             "needs_research": False,
             "research_query": "",
             "resolved": False,
         }
+
+    raw = strip_json_code_fence(getattr(response, "content", ""))
+    result = safe_json_loads(raw)
+
+    if not isinstance(result, dict):
+        result = {}
+
+    result.setdefault("critique", raw[:500])
+    result["needs_clarification"] = bool(result.get("needs_clarification", False))
+    result.setdefault("clarifying_question", "")
+    result["needs_research"] = bool(result.get("needs_research", False))
+    result.setdefault("research_query", "")
+    result["resolved"] = bool(result.get("resolved", False))
 
     return result

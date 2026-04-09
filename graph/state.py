@@ -1,5 +1,5 @@
-from typing import TypedDict, Annotated
 from operator import add
+from typing import Annotated, TypedDict
 
 
 class DiagnosticState(TypedDict):
@@ -13,5 +13,7 @@ class DiagnosticState(TypedDict):
     reflection_count: int
     hitl_pending: bool
     hitl_question: str
+    needs_research: bool
+    research_query: str
     final_report: dict | None
     done: bool
