@@ -48,7 +48,8 @@ def run_researcher(
     )
     results.extend(tavily_results)
 
-    for item in tavily_results[:2]:
+    scrape_n = 3 if "pharmacotherapy" in (research_query or "").lower() else 2
+    for item in tavily_results[:scrape_n]:
         url = item.get("url", "")
         if _is_valid_http_url(url):
             scraped = _firecrawl_scrape(url)

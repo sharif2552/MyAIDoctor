@@ -44,9 +44,11 @@ def refresh_session_title_if_placeholder(db: Session, session: ChatSession) -> b
 
 ROUTE_PLANNER_PROMPT = """You are a routing planner for a medical assistant app.
 Choose exactly one route:
-- direct_answer
-- tool_research
-- diagnostic_flow
+- direct_answer — only for greetings, app help, or generic non-clinical chit-chat.
+- tool_research — only when the user explicitly asks for a web search (e.g. tavily, firecrawl, look up online).
+- diagnostic_flow — symptoms, possible diagnoses, treatment questions, medications, "what should I take", dosing, prescriptions, OTC advice (full workflow with research + skeptic).
+
+Never use direct_answer to refuse medication or treatment questions — send those to diagnostic_flow.
 Return JSON: {"route":"...","reply":"...","reason":"..."}"""
 
 _graph = None
@@ -127,6 +129,33 @@ def plan_user_route(user_message: str, prior_user_messages: list[str]) -> dict:
     )
     if any(marker in lowered for marker in explicit_research_markers):
         return {"route": "tool_research", "reply": "", "reason": "explicit_research_command"}
+
+    medication_or_treatment_markers = (
+        "give me medicine",
+        "give me medication",
+        "give me meds",
+        "what medicine",
+        "what medication",
+        "what drug",
+        "what pill",
+        "which medicine",
+        "which medication",
+        "prescription",
+        "medication for",
+        "medicine for",
+        "meds for",
+        "should i take",
+        "what can i take",
+        "recommend a drug",
+        "otc for",
+        "dosage",
+        "dose of",
+        "antibiotic",
+        "painkiller",
+        "pain killer",
+    )
+    if any(marker in lowered for marker in medication_or_treatment_markers):
+        return {"route": "diagnostic_flow", "reply": "", "reason": "medication_or_treatment_advice"}
 
     llm = get_llm(temperature=0)
     context = "\n".join(f"- {msg}" for msg in prior_user_messages[-6:])
@@ -213,6 +242,9 @@ def run_diagnostic_flow(
         "hitl_question": "",
         "needs_research": False,
         "research_query": "",
+        "needs_initial_medication_research": False,
+        "post_research_route": "",
+        "treatment_recommendations": [],
         "final_report": None,
         "done": False,
     }

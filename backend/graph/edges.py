@@ -12,6 +12,19 @@ except ValueError:
     MAX_REFLECTIONS = 3
 
 
+def after_intake(state: DiagnosticState) -> str:
+    if state.get("needs_initial_medication_research"):
+        return "researcher"
+    return "actor"
+
+
+def after_researcher(state: DiagnosticState) -> str:
+    route = (state.get("post_research_route") or "").strip().lower()
+    if route == "actor":
+        return "actor"
+    return "skeptic"
+
+
 def after_skeptic(state: DiagnosticState) -> str:
     if state.get("done"):
         return "report"

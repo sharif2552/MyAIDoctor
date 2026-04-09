@@ -38,6 +38,17 @@ def test_plan_user_route_falls_back_on_invalid_json(monkeypatch):
     assert route["reason"] == "fallback"
 
 
+def test_plan_user_route_forces_diagnostic_flow_for_medication(monkeypatch):
+    monkeypatch.setattr(
+        orchestrator,
+        "get_llm",
+        lambda temperature=0: _PlannerLLM('{"route":"direct_answer","reply":"I cannot advise","reason":"refusal"}'),
+    )
+    route = orchestrator.plan_user_route("give me medicine for my headache", [])
+    assert route["route"] == "diagnostic_flow"
+    assert "medication" in route["reason"]
+
+
 def test_plan_user_route_forces_tool_research_for_explicit_command(monkeypatch):
     monkeypatch.setattr(
         orchestrator,

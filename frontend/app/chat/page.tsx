@@ -27,6 +27,7 @@ function FinalReportSection({ report }: { report: Record<string, unknown> }) {
       ? String((meta as { disclaimer?: unknown }).disclaimer ?? "")
       : "";
   const evidence = Array.isArray(report.evidence_log) ? report.evidence_log : [];
+  const treatment = Array.isArray(report.treatment_recommendations) ? report.treatment_recommendations : [];
 
   return (
     <section className="glass glass-card" style={{ marginTop: 16 }}>
@@ -62,6 +63,38 @@ function FinalReportSection({ report }: { report: Record<string, unknown> }) {
                     <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: "0.92em", opacity: 0.92 }}>
                       {ev.slice(0, 6).map((e, j) => (
                         <li key={j}>{e}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {treatment.length ? (
+        <div style={{ marginBottom: 14 }}>
+          <strong style={{ display: "block", marginBottom: 6 }}>Treatment options (from guidelines / sources)</strong>
+          <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.5 }}>
+            {treatment.map((item, i) => {
+              const t = item as {
+                drug_or_class?: string;
+                role?: string;
+                dosing_note?: string;
+                key_cautions?: string[];
+              };
+              const cautions = Array.isArray(t.key_cautions) ? t.key_cautions : [];
+              return (
+                <li key={i} style={{ marginBottom: 10 }}>
+                  <strong>{t.drug_or_class ?? "—"}</strong>
+                  {t.role ? ` — ${t.role}` : null}
+                  {t.dosing_note ? (
+                    <div style={{ marginTop: 4, fontSize: "0.95em" }}>{t.dosing_note}</div>
+                  ) : null}
+                  {cautions.length ? (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: "0.9em", opacity: 0.9 }}>
+                      {cautions.map((c, j) => (
+                        <li key={j}>{c}</li>
                       ))}
                     </ul>
                   ) : null}

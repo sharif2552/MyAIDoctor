@@ -17,5 +17,6 @@ def test_build_report_minimal():
 
     assert "summary_of_findings" in report
     assert report["differential_diagnosis"][0]["condition"] == "Migraine"
+    assert report["treatment_recommendations"] == []
     assert report["metadata"]["questions_asked"] == 1
     assert report["metadata"]["sources_reviewed"] == 1

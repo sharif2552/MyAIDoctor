@@ -5,7 +5,7 @@ LangGraph workflow definition for the Reflexion-based Medical Diagnostic System.
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from backend.graph.edges import after_skeptic
+from backend.graph.edges import after_intake, after_researcher, after_skeptic
 from backend.graph.nodes import actor_node, intake_node, report_node, researcher_node, skeptic_node
 from backend.graph.state import DiagnosticState
 
@@ -29,11 +29,25 @@ def build_graph():
     builder.add_node("report", report_node)
 
     builder.add_edge(START, "intake")
-    builder.add_edge("intake", "actor")
     builder.add_edge("actor", "skeptic")
-    builder.add_edge("researcher", "skeptic")
     builder.add_edge("report", END)
 
+    builder.add_conditional_edges(
+        "intake",
+        after_intake,
+        {
+            "actor": "actor",
+            "researcher": "researcher",
+        },
+    )
+    builder.add_conditional_edges(
+        "researcher",
+        after_researcher,
+        {
+            "actor": "actor",
+            "skeptic": "skeptic",
+        },
+    )
     builder.add_conditional_edges(
         "skeptic",
         after_skeptic,

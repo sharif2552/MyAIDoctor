@@ -19,7 +19,8 @@ Your job:
 1. Find the WEAKEST point in the proposed diagnosis. What key symptom, lab finding, or clinical criterion is MISSING?
 2. Identify 1 specific clarifying question that, if answered, would most change the differential. Ask it directly to the patient using "you/your".
 3. If you have research results, cite specific contradictions between the evidence and the proposed diagnosis.
-4. Decide if the current evidence is enough to finalize — say so clearly.
+4. When treatment or medications were discussed, stress-test dosing, allergies, pregnancy/breastfeeding, age, kidney/liver disease, bleeding risk, and drug interactions. Say if more research is needed before finalizing advice.
+5. Decide if the current evidence is enough to finalize — say so clearly.
 
 Be precise and respectful. Avoid harsh or developer-style phrasing.
 
@@ -60,11 +61,16 @@ def run_skeptic(
 
     research_section = ""
     if research_results:
-        snippets = [
-            f"- [{r.get('title', 'Source')}]({r.get('url', '')}): {r.get('snippet', '')}"
-            for r in research_results[:4]
-        ]
-        research_section = "\n\nResearch evidence gathered:\n" + "\n".join(snippets)
+        parts: list[str] = []
+        for r in research_results[:4]:
+            if not isinstance(r, dict):
+                continue
+            line = f"- [{r.get('title', 'Source')}]({r.get('url', '')}): {r.get('snippet', '')}"
+            parts.append(line)
+            fc = (r.get("full_content") or "")[:1200]
+            if fc:
+                parts.append(f"  Scraped excerpt: {fc}")
+        research_section = "\n\nResearch evidence gathered:\n" + "\n".join(parts)
 
     answers_section = ""
     if user_answers:

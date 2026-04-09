@@ -15,5 +15,10 @@ class DiagnosticState(TypedDict):
     hitl_question: str
     needs_research: bool
     research_query: str
+    # Medication / treatment path: intake runs Tavily+Firecrawl before first actor turn.
+    needs_initial_medication_research: bool
+    # After researcher: "actor" (first-line meds path) or "skeptic" (skeptic-requested research).
+    post_research_route: str
+    treatment_recommendations: list[dict]
     final_report: dict | None
     done: bool

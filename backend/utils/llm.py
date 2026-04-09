@@ -52,6 +52,20 @@ def get_llm(temperature: float = 0.2):
                 elif any(
                     k in query
                     for k in [
+                        "medicine",
+                        "medication",
+                        "prescription",
+                        "what drug",
+                        "what pill",
+                        "antibiotic",
+                        "dosage",
+                        "should i take",
+                    ]
+                ):
+                    route = "diagnostic_flow"
+                elif any(
+                    k in query
+                    for k in [
                         "search",
                         "tavily",
                         "firecrawl",
@@ -96,6 +110,7 @@ def get_llm(temperature: float = 0.2):
                             "icd_hint": "G44.2",
                         },
                     ],
+                    "treatment_recommendations": [],
                 }
                 return MockResponse(content=json.dumps(out))
 

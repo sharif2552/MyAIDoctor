@@ -11,6 +11,7 @@ def build_report(
     research_results: list[dict],
     user_answers: list[str],
     skeptic_critique: str,
+    treatment_recommendations: list[dict] | None = None,
 ) -> dict:
     if not isinstance(symptoms, str):
         symptoms = str(symptoms)
@@ -22,6 +23,26 @@ def build_report(
         user_answers = []
     if not isinstance(skeptic_critique, str):
         skeptic_critique = str(skeptic_critique)
+    if treatment_recommendations is None:
+        treatment_recommendations = []
+    if not isinstance(treatment_recommendations, list):
+        treatment_recommendations = []
+
+    normalized_tx = []
+    for item in treatment_recommendations:
+        if not isinstance(item, dict):
+            continue
+        cautions = item.get("key_cautions")
+        if not isinstance(cautions, list):
+            cautions = []
+        normalized_tx.append(
+            {
+                "drug_or_class": str(item.get("drug_or_class", "")).strip(),
+                "role": str(item.get("role", "")).strip(),
+                "dosing_note": str(item.get("dosing_note", "")).strip(),
+                "key_cautions": [str(c) for c in cautions if c is not None],
+            }
+        )
 
     normalized_dx = []
     for item in differential:
@@ -74,6 +95,7 @@ def build_report(
     return {
         "summary_of_findings": summary,
         "differential_diagnosis": sorted_dx,
+        "treatment_recommendations": normalized_tx,
         "evidence_log": evidence_log,
         "recommended_next_steps": next_steps,
         "metadata": {
