@@ -1,0 +1,47 @@
+### Python / Streamlit
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment variable files
+.env
+.env.*
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+
+# Streamlit
+.streamlit/secrets.toml
+
+### IDEs / editors
+.vscode/
+.idea/
+*.code-workspace
+
+### OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+### Logs
+*.log
