@@ -9,6 +9,7 @@ import os
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
+from langsmith import traceable
 
 from backend.utils.logging import get_logger
 
@@ -16,6 +17,7 @@ load_dotenv()
 logger = get_logger("myaidoc.researcher")
 
 
+@traceable(name="run_researcher", run_type="chain")
 def run_researcher(
     symptoms: str,
     differential: list[dict],
@@ -103,6 +105,7 @@ NEWS_OUTBREAK_DOMAINS = [
 ]
 
 
+@traceable(name="tavily_search", run_type="tool")
 def _tavily_search(
     query: str,
     include_domains: list[str] | None = None,
@@ -157,6 +160,7 @@ def _tavily_search(
         return []
 
 
+@traceable(name="firecrawl_scrape", run_type="tool")
 def _firecrawl_scrape(url: str) -> str:
     try:
         from firecrawl import FirecrawlApp

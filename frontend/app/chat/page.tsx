@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import AuthGuard from "@/components/AuthGuard";
+import ChatShader from "@/components/ChatShader";
 import { chatApi, SessionSummary, sessionsApi } from "@/lib/api";
 
 type Line = { role: string; agent: string; content: string };
@@ -158,6 +159,9 @@ export default function ChatPage() {
   const [booting, setBooting] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const timelineRef = useRef<HTMLElement>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -241,6 +245,7 @@ export default function ChatPage() {
 
   const switchSession = (nextSession: SessionSummary) => {
     setFinalReport(null);
+    setReportOpen(false);
     setSessionId(nextSession.id);
     setHitlQuestion(nextSession.waiting_for_hitl ? nextSession.hitl_question || "" : "");
   };
@@ -264,11 +269,11 @@ export default function ChatPage() {
     }
   };
 
-  const send = async () => {
+  const send = async (overrideText?: string) => {
     setError("");
     const token = localStorage.getItem("token");
-    if (!token || !sessionId || !input.trim()) return;
-    const userText = input;
+    const userText = overrideText ?? input;
+    if (!token || !sessionId || !userText.trim()) return;
     setMessages((prev) => [...prev, { role: "user", agent: "user", content: userText }]);
     setInput("");
     try {
@@ -277,11 +282,11 @@ export default function ChatPage() {
       const question = res.waiting_for_hitl ? res.hitl_question : "";
       setHitlQuestion(question);
       updateSessionHitlState(res.waiting_for_hitl, question);
-      if (res.final_report) setFinalReport(res.final_report);
+      if (res.final_report) { setFinalReport(res.final_report); setReportOpen(true); }
       else if (res.session_done) {
         try {
           const r = await chatApi.report(token, sessionId);
-          setFinalReport(r.final_report ?? null);
+          if (r.final_report) { setFinalReport(r.final_report); setReportOpen(true); }
         } catch {
           /* keep prior report if any */
         }
@@ -292,20 +297,21 @@ export default function ChatPage() {
     }
   };
 
-  const submitHitl = async () => {
+  const submitHitl = async (overrideText?: string) => {
     const token = localStorage.getItem("token");
-    if (!token || !sessionId || !hitlAnswer.trim()) return;
+    const answerText = overrideText ?? hitlAnswer;
+    if (!token || !sessionId || !answerText.trim()) return;
     try {
-      const res = await chatApi.hitl(token, sessionId, hitlAnswer);
-      setMessages((prev) => [...prev, { role: "user", agent: "user", content: hitlAnswer }, ...res.messages]);
+      const res = await chatApi.hitl(token, sessionId, answerText);
+      setMessages((prev) => [...prev, { role: "user", agent: "user", content: answerText }, ...res.messages]);
       const question = res.waiting_for_hitl ? res.hitl_question : "";
       setHitlQuestion(question);
       updateSessionHitlState(res.waiting_for_hitl, question);
-      if (res.final_report) setFinalReport(res.final_report);
+      if (res.final_report) { setFinalReport(res.final_report); setReportOpen(true); }
       else if (res.session_done) {
         try {
           const r = await chatApi.report(token, sessionId);
-          setFinalReport(r.final_report ?? null);
+          if (r.final_report) { setFinalReport(r.final_report); setReportOpen(true); }
         } catch {
           /* keep prior report if any */
         }
@@ -317,116 +323,179 @@ export default function ChatPage() {
     }
   };
 
+  // Show scroll-to-bottom button when not near the bottom
+  useEffect(() => {
+    const el = timelineRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 80);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    const el = timelineRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (isNearBottom) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    const el = timelineRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  };
+
   return (
     <AuthGuard>
-      <section className="glass-shell animated-border glass-card">
-        <header className="top-nav">
-          <div>
-            <h1 className="page-title">MyAIDoctor Chat</h1>
-            <p className="muted" style={{ margin: "4px 0 0" }}>
-              Ask symptoms, request research, and answer follow-up prompts in one timeline.
-            </p>
-          </div>
-          <div className="top-nav-links">
-            {sessionId ? <Link href={`/sessions/${sessionId}`}>Session</Link> : null}
-            {sessionId ? <Link href={`/reports/${sessionId}`}>Report</Link> : null}
-            <button
-              onClick={() => {
-                localStorage.removeItem("token");
-                window.location.href = "/login";
-              }}
-            >
-              Logout
-            </button>
-          </div>
-        </header>
+      <div className="chat-shader-wrap">
+        {/* 3-D WebGL shader — rendered behind the glass card */}
+        <div className="chat-shader-canvas-box">
+          <ChatShader />
+        </div>
 
-        <section className="glass glass-card" style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-            <strong>Conversations</strong>
-            <button onClick={handleNewConversation}>New conversation</button>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              marginTop: 10,
-              overflowX: "auto",
-              paddingBottom: 2
-            }}
-          >
-            {sessions.map((s, idx) => (
-              <button
-                key={s.id}
-                onClick={() => switchSession(s)}
-                style={{
-                  whiteSpace: "nowrap",
-                  background:
-                    s.id === sessionId
-                      ? "linear-gradient(135deg, rgba(59,130,246,0.8), rgba(45,212,191,0.75))"
-                      : "rgba(14, 28, 51, 0.72)",
-                  border: "1px solid rgba(166, 208, 255, 0.28)"
-                }}
-              >
-                {s.title || `Conversation ${sessions.length - idx}`}
+        <section className="glass-shell glass-shell-above animated-border chat-layout">
+
+          {/* ── Sidebar ─────────────────────────────────────────── */}
+          <aside className="chat-sidebar glass">
+            <div className="conv-panel-header">
+              <span className="conv-panel-label">Conversations</span>
+            </div>
+            <button className="btn-new-conv" onClick={handleNewConversation}>+ New chat</button>
+            <ul className="conv-list">
+              {sessions.map((s, idx) => {
+                const active = s.id === sessionId;
+                return (
+                  <li key={s.id}>
+                    <button
+                      onClick={() => switchSession(s)}
+                      className={`conv-item${active ? " conv-item--active" : ""}`}
+                    >
+                      <span className="conv-item-dot" />
+                      <span className="conv-item-title">
+                        {s.title || `Conversation ${sessions.length - idx}`}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+
+          {/* ── Main chat area ───────────────────────────────────── */}
+          <div className="chat-main">
+            <header className="top-nav">
+              <div>
+                <h1 className="page-title">MyAIDoctor</h1>
+                <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
+                  Ask symptoms, request research, answer follow-up prompts.
+                </p>
+              </div>
+              <div className="top-nav-links">
+                {sessionId ? <Link href={`/sessions/${sessionId}`}>Session</Link> : null}
+                {sessionId ? <Link href={`/reports/${sessionId}`}>Report</Link> : null}
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("token");
+                    window.location.href = "/login";
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            </header>
+
+            <div className="chat-timeline-wrap">
+            <section ref={timelineRef} className="glass glass-strong chat-timeline">
+              {booting || loadingMessages ? (
+                <article className="message-row">
+                  <div className="message-bubble">
+                    <div className="message-meta">System</div>
+                    Loading conversation...
+                  </div>
+                </article>
+              ) : !messages.length ? (
+                <article className="message-row">
+                  <div className="message-bubble">
+                    <div className="message-meta">System</div>
+                    Share what you are feeling and when it started. You can also ask:{" "}
+                    <em>do tavily search ...</em> for live web research.
+                  </div>
+                </article>
+              ) : null}
+              {messages.map((m, i) => (
+                <article key={`${i}-${m.agent}`} className={`message-row ${m.role === "user" ? "user" : ""}`}>
+                  <div className={`message-bubble ${m.role === "user" ? "user" : m.agent}`}>
+                    <div className="message-meta">{m.role === "user" ? "You" : m.agent}</div>
+                    <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{m.content}</p>
+                  </div>
+                </article>
+              ))}
+            </section>
+            {showScrollBtn && (
+              <button className="btn-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to bottom">
+                ↓
               </button>
-            ))}
+            )}
+            </div>
+
+            {finalReport ? (
+              <>
+                <button
+                  className="btn-report-toggle"
+                  onClick={() => setReportOpen((o) => !o)}
+                >
+                  {reportOpen ? "Hide report" : "View medical report"}
+                </button>
+                {reportOpen ? (
+                  <div className="report-drawer glass glass-card">
+                    <button
+                      className="btn-report-close"
+                      onClick={() => setReportOpen(false)}
+                      aria-label="Close report"
+                    >
+                      ✕
+                    </button>
+                    <FinalReportSection report={finalReport} />
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            <section className={`glass composer${hitlQuestion ? " animated-border" : ""}`}>
+              {hitlQuestion ? (
+                <p className="hitl-prompt">{hitlQuestion}</p>
+              ) : null}
+              <div className="composer-row">
+                <textarea
+                  rows={3}
+                  value={hitlQuestion ? hitlAnswer : input}
+                  onChange={(e) =>
+                    hitlQuestion ? setHitlAnswer(e.target.value) : setInput(e.target.value)
+                  }
+                  placeholder={
+                    hitlQuestion ? "Type your answer…" : "Describe symptoms or ask for research…"
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      const val = (e.target as HTMLTextAreaElement).value;
+                      hitlQuestion ? submitHitl(val) : send(val);
+                    }
+                  }}
+                />
+                <button onClick={() => hitlQuestion ? submitHitl() : send()}>
+                  {hitlQuestion ? "Answer" : "Send"}
+                </button>
+              </div>
+            </section>
+
+            {error ? <p className="error-text">{error}</p> : null}
           </div>
+
         </section>
-
-        <section className="glass glass-strong chat-timeline">
-          {booting || loadingMessages ? (
-            <article className="message-row">
-              <div className="message-bubble">
-                <div className="message-meta">System</div>
-                Loading conversation...
-              </div>
-            </article>
-          ) : !messages.length ? (
-            <article className="message-row">
-              <div className="message-bubble">
-                <div className="message-meta">System</div>
-                Share what you are feeling and when it started. You can also ask:{" "}
-                <em>do tavily search ...</em> for live web research.
-              </div>
-            </article>
-          ) : null}
-          {messages.map((m, i) => (
-            <article key={`${i}-${m.agent}`} className={`message-row ${m.role === "user" ? "user" : ""}`}>
-              <div className={`message-bubble ${m.role === "user" ? "user" : m.agent}`}>
-                <div className="message-meta">{m.role === "user" ? "You" : m.agent}</div>
-                <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{m.content}</p>
-              </div>
-            </article>
-          ))}
-        </section>
-
-        {finalReport ? <FinalReportSection report={finalReport} /> : null}
-
-        <section className="glass composer">
-          <div className="stack">
-            <textarea
-              rows={4}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe symptoms or ask for research"
-            />
-            <button onClick={send}>Send</button>
-          </div>
-        </section>
-
-        {hitlQuestion ? (
-          <section className="glass animated-border" style={{ marginTop: 16, padding: 12 }}>
-            <h3 style={{ margin: "4px 0 8px" }}>Follow-up question</h3>
-            <p style={{ marginTop: 0 }}>{hitlQuestion}</p>
-            <textarea rows={3} value={hitlAnswer} onChange={(e) => setHitlAnswer(e.target.value)} />
-            <button onClick={submitHitl} style={{ marginTop: 10 }}>
-              Submit answer
-            </button>
-          </section>
-        ) : null}
-        {error ? <p className="error-text">{error}</p> : null}
-      </section>
+      </div>
     </AuthGuard>
   );
 }
