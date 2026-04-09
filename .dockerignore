@@ -16,10 +16,8 @@ __pycache__
 venv
 .env
 .env.*
-.streamlit/secrets.toml
 
-# Local shims used only for smoke tests (do not ship in containers)
-streamlit.py
+# Legacy local shim (do not ship in containers)
 dotenv.py
 
 # Build artifacts

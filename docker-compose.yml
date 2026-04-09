@@ -1,14 +1,46 @@
+# If you see "error getting credentials" on build, either fix ~/.docker/config.json
+# (remove credsStore) or run from repo root:
+#   export DOCKER_CONFIG="$(pwd)/docker/minimal-client-config"
+#   docker compose -f docker-compose.yml up --build
+# Or: bash scripts/docker-compose.sh up --build
 services:
-  myaidoctor:
-    build: .
-    container_name: myaidoctor
-    ports:
-      - "8501:8501"
+  postgres:
+    image: postgres:16-alpine
+    container_name: myaidoctor-postgres
     environment:
-      # Set to 0 to use real providers (Groq/OpenAI) when keys are available
-      LOCAL_DEMO: "0"
+      POSTGRES_DB: myaidoctor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d myaidoctor"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: myaidoctor-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
       LOG_LEVEL: "DEBUG"
-      # Pass real keys via .env (compose loads automatically if present)
+      DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/myaidoctor"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-me}"
+      CORS_ALLOW_ORIGINS: "http://localhost:3000"
+      WATCHFILES_FORCE_POLLING: "true"
+      LOCAL_DEMO: "${LOCAL_DEMO:-0}"
+      # Host proxy (often http://127.0.0.1:...) breaks Groq/OpenAI from inside the container (connection refused).
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      NO_PROXY: "*"
       GROQ_API_KEY: "${GROQ_API_KEY}"
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
       TAVILY_API_KEY: "${TAVILY_API_KEY}"
@@ -17,4 +49,33 @@ services:
       LANGSMITH_TRACING: "${LANGSMITH_TRACING:-false}"
       LANGSMITH_PROJECT: "${LANGSMITH_PROJECT:-MyAIDoctor}"
       LANGSMITH_ENDPOINT: "${LANGSMITH_ENDPOINT:-https://api.smith.langchain.com}"
+    volumes:
+      - ./:/app
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
     restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: myaidoctor-frontend
+    depends_on:
+      backend:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
