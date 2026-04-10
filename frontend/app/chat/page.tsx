@@ -424,7 +424,7 @@ export default function ChatPage() {
                   </div>
                 </article>
               ) : null}
-              {messages.map((m, i) => (
+              {messages.filter((m) => m.agent !== "actor" && m.agent !== "skeptic").map((m, i) => (
                 <article key={`${i}-${m.agent}`} className={`message-row ${m.role === "user" ? "user" : ""}`}>
                   <div className={`message-bubble ${m.role === "user" ? "user" : m.agent}`}>
                     <div className="message-meta">{m.role === "user" ? "You" : m.agent}</div>
@@ -464,9 +464,6 @@ export default function ChatPage() {
             ) : null}
 
             <section className={`glass composer${hitlQuestion ? " animated-border" : ""}`}>
-              {hitlQuestion ? (
-                <p className="hitl-prompt">{hitlQuestion}</p>
-              ) : null}
               <div className="composer-row">
                 <textarea
                   rows={3}

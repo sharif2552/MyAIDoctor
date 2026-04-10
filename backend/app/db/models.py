@@ -29,6 +29,7 @@ class ChatSession(Base):
     waiting_for_hitl: Mapped[bool] = mapped_column(Boolean, default=False)
     hitl_question: Mapped[str] = mapped_column(Text, default="")
     final_report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    langsmith_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 

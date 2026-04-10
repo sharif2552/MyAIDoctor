@@ -21,6 +21,9 @@ services:
       timeout: 5s
       retries: 20
 
+  # Migrations (from repo root on host): docker compose exec backend alembic upgrade head
+  # If tables already exist but alembic never ran: alembic stamp 0001_init && alembic upgrade head
+  # Or use: docker compose exec backend sh scripts/alembic-docker.sh upgrade head
   backend:
     build:
       context: .
@@ -30,6 +33,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      PYTHONPATH: "/app"
       LOG_LEVEL: "DEBUG"
       DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/myaidoctor"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-me}"

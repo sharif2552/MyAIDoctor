@@ -5,7 +5,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
-from langsmith import traceable
+from langsmith import get_current_run_tree, traceable
+from langsmith.run_trees import RunTree
 from sqlalchemy.orm import Session
 
 from backend.app.api.deps import get_current_user
@@ -103,6 +104,18 @@ def run_chat_message_traced(
         )
         for msg in out:
             save_message(db, session, msg["role"], msg["content"], msg["agent"])
+        if waiting and question:
+            q_msg = {"role": "assistant", "agent": "system", "content": question}
+            out.append(q_msg)
+            save_message(db, session, q_msg["role"], q_msg["content"], q_msg["agent"])
+
+    run_id: str | None = None
+    try:
+        rt = get_current_run_tree()
+        if rt is not None:
+            run_id = str(rt.id)
+    except Exception:
+        pass
 
     return {
         "assistant_messages": out,
@@ -110,6 +123,7 @@ def run_chat_message_traced(
         "hitl_question": question,
         "session_done": session_done,
         "final_report": final_report,
+        "langsmith_run_id": run_id,
     }
 
 
@@ -215,6 +229,11 @@ def run_chat_hitl_traced(
             out.append(msg)
             save_message(db, session, msg["role"], msg["content"], msg["agent"])
 
+    if waiting and question:
+        q_msg = {"role": "assistant", "agent": "system", "content": question}
+        out.append(q_msg)
+        save_message(db, session, q_msg["role"], q_msg["content"], q_msg["agent"])
+
     return {
         "assistant_messages": out,
         "waiting_for_hitl": waiting,
@@ -252,6 +271,8 @@ def send_message(
     session.hitl_question = question
     session.final_report = final_report
     session.updated_at = datetime.utcnow()
+    if traced.get("langsmith_run_id"):
+        session.langsmith_run_id = traced["langsmith_run_id"]
     db.commit()
 
     return ChatResponse(
@@ -283,7 +304,20 @@ def resume_hitl(
     refresh_session_title_if_placeholder(db, session)
     graph = get_graph()
     config = {"configurable": {"thread_id": session.thread_id}}
-    traced = run_chat_hitl_traced(db, session, payload, graph, config)
+
+    langsmith_extra: dict[str, Any] = {}
+    if session.langsmith_run_id:
+        try:
+            parent = RunTree(
+                name="chat_message",
+                run_type="chain",
+                id=session.langsmith_run_id,
+            )
+            langsmith_extra = {"parent": parent}
+        except Exception:
+            pass
+
+    traced = run_chat_hitl_traced(db, session, payload, graph, config, langsmith_extra=langsmith_extra)
     out = traced["assistant_messages"]
     waiting = traced["waiting_for_hitl"]
     question = traced["hitl_question"]
