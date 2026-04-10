@@ -24,15 +24,21 @@ export default function MedicalShaderBackground() {
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    /* particles with pre-assigned color index */
-    const particles = Array.from({ length: PARTICLE_COUNT }, (_, i) => ({
-      phase:  (Math.PI * 2 * i) / PARTICLE_COUNT,
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+
+    /* particles with pre-assigned color index — fewer on mobile */
+    const count = isMobile ? 10 : PARTICLE_COUNT;
+    const particles = Array.from({ length: count }, (_, i) => ({
+      phase:  (Math.PI * 2 * i) / count,
       radius: 1.5 + Math.random() * 2.5,
       speed:  0.4 + Math.random() * 0.8,
       drift:  0.4 + Math.random() * 1.2,
       lane:   Math.random(),
       color:  P_COLORS[i % P_COLORS.length],
     }));
+
+    /* Lower frame rate on mobile — background is purely decorative */
+    const fpsInterval = isMobile ? 1000 / 15 : FPS_INTERVAL;
 
     let raf   = 0;
     let lastTs = 0;
@@ -95,7 +101,7 @@ export default function MedicalShaderBackground() {
 
     const render = (ts: number) => {
       raf = requestAnimationFrame(render);
-      if (ts - lastTs < FPS_INTERVAL) return;
+      if (ts - lastTs < fpsInterval) return;
       lastTs = ts;
 
       ctx.clearRect(0, 0, width, height);

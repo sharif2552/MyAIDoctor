@@ -93,6 +93,8 @@ export default function ChatShader() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    // Skip WebGL on mobile — CSS hides the wrapper, but also avoid creating the context
+    if (window.matchMedia("(max-width: 768px)").matches) return;
 
     const gl = canvas.getContext("webgl", { antialias: false, alpha: false, powerPreference: "low-power" });
     if (!gl) return;

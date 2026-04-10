@@ -160,6 +160,7 @@ export default function ChatPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const timelineRef = useRef<HTMLElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
@@ -231,6 +232,7 @@ export default function ChatPage() {
     const token = localStorage.getItem("token");
     if (!token) return;
     setError("");
+    setSidebarOpen(false);
     try {
       const created = await sessionsApi.create(token);
       setSessions((prev) => [created, ...prev]);
@@ -248,6 +250,7 @@ export default function ChatPage() {
     setReportOpen(false);
     setSessionId(nextSession.id);
     setHitlQuestion(nextSession.waiting_for_hitl ? nextSession.hitl_question || "" : "");
+    setSidebarOpen(false);
   };
 
   const updateSessionHitlState = (waiting: boolean, question: string) => {
@@ -357,8 +360,24 @@ export default function ChatPage() {
 
         <section className="glass-shell glass-shell-above animated-border chat-layout">
 
-          {/* ── Sidebar ─────────────────────────────────────────── */}
-          <aside className="chat-sidebar glass">
+          {/* ── Sidebar backdrop (closes drawer on click) ───────── */}
+          {sidebarOpen && (
+            <div
+              className="sidebar-backdrop"
+              onClick={() => setSidebarOpen(false)}
+              aria-hidden="true"
+            />
+          )}
+
+          {/* ── Sidebar drawer ───────────────────────────────────── */}
+          <aside className={`chat-sidebar${sidebarOpen ? " sidebar-open" : ""}`}>
+            <button
+              className="btn-sidebar-close"
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close conversations"
+            >
+              ✕
+            </button>
             <div className="conv-panel-header">
               <span className="conv-panel-label">Conversations</span>
             </div>
@@ -386,16 +405,26 @@ export default function ChatPage() {
           {/* ── Main chat area ───────────────────────────────────── */}
           <div className="chat-main">
             <header className="top-nav">
-              <div>
-                <h1 className="page-title">MyAIDoctor</h1>
-                <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.88rem" }}>
-                  Ask symptoms, request research, answer follow-up prompts.
-                </p>
-              </div>
-              <div className="top-nav-links">
-                {sessionId ? <Link href={`/sessions/${sessionId}`}>Session</Link> : null}
-                {sessionId ? <Link href={`/reports/${sessionId}`}>Report</Link> : null}
+              <div className="top-nav-brand">
                 <button
+                  className="btn-hamburger"
+                  onClick={() => setSidebarOpen(true)}
+                  aria-label="Open conversations"
+                >
+                  ☰
+                </button>
+                <h1 className="page-title">MyAIDoctor</h1>
+              </div>
+
+              <div className="top-nav-actions">
+                {sessionId ? (
+                  <Link href={`/sessions/${sessionId}`} className="nav-pill">Session</Link>
+                ) : null}
+                {sessionId ? (
+                  <Link href={`/reports/${sessionId}`} className="nav-pill">Report</Link>
+                ) : null}
+                <button
+                  className="btn-logout"
                   onClick={() => {
                     localStorage.removeItem("token");
                     window.location.href = "/login";

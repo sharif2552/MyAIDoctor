@@ -1,10 +1,16 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import MedicalShaderBackground from "@/components/MedicalShaderBackground";
 
 export const metadata: Metadata = {
   title: "MyAIDoctor",
-  description: "AI diagnostic assistant"
+  description: "AI diagnostic assistant",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

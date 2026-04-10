@@ -204,13 +204,76 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  padding: 6px 0 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(140, 200, 255, 0.09);
+  flex-shrink: 0;
 }
 
+.top-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Ghost pill — Session & Report links */
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  border: 1px solid rgba(140, 200, 255, 0.20);
+  background: rgba(10, 22, 46, 0.45);
+  backdrop-filter: blur(8px);
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  text-decoration: none !important;
+}
+
+.nav-pill:hover {
+  background: rgba(30, 60, 110, 0.58);
+  border-color: rgba(96, 165, 250, 0.40);
+  color: var(--text) !important;
+}
+
+/* Danger-tinted logout pill */
+.btn-logout {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  background: rgba(253, 164, 175, 0.10);
+  border: 1px solid rgba(253, 164, 175, 0.24);
+  color: var(--danger);
+  box-shadow: none;
+}
+
+.btn-logout:hover {
+  background: rgba(253, 164, 175, 0.20);
+  border-color: rgba(253, 164, 175, 0.44);
+  color: #fecdd3;
+  transform: none;
+  filter: none;
+  box-shadow: 0 4px 16px rgba(253, 164, 175, 0.14);
+}
+
+/* keep old class as alias in case it's referenced elsewhere */
 .top-nav-links {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -421,7 +484,7 @@ button:focus-visible {
 /* ── error ────────────────────────────────────────────────── */
 .error-text { color: var(--danger); }
 
-/* ── chat two-column layout ───────────────────────────────── */
+/* ── chat layout (main area only — sidebar is a fixed drawer) ─ */
 .chat-layout {
   display: flex;
   align-items: stretch;
@@ -431,19 +494,100 @@ button:focus-visible {
   height: calc(100vh - 64px);
 }
 
+/* ── sidebar drawer ───────────────────────────────────────── */
 .chat-sidebar {
-  width: 220px;
-  flex-shrink: 0;
-  min-height: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  height: 100dvh;
+  width: 270px;
+  z-index: 300;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px 12px;
-  border-right: 1px solid rgba(140, 200, 255, 0.12);
-  backdrop-filter: blur(18px);
-  background: rgba(6, 14, 30, 0.45);
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  padding: 20px 14px;
+  border-right: 1px solid rgba(140, 200, 255, 0.18);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background: rgba(5, 11, 26, 0.88);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  box-shadow: 4px 0 40px rgba(0, 0, 0, 0.55), var(--glow-blue);
   overflow: hidden;
+  transform: translateX(-100%);
+  transition: transform 300ms cubic-bezier(.22, .68, 0, 1.2);
+  will-change: transform;
+}
+
+.chat-sidebar.sidebar-open {
+  transform: translateX(0);
+}
+
+/* Backdrop that appears behind the open drawer */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 299;
+  background: rgba(0, 3, 10, 0.60);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fade-in-bg 200ms ease both;
+}
+
+@keyframes fade-in-bg {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── hamburger button ─────────────────────────────────────── */
+.btn-hamburger {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+  background: rgba(10, 22, 46, 0.60);
+  border: 1px solid rgba(140, 200, 255, 0.18);
+  box-shadow: none;
+  border-radius: var(--radius-sm);
+}
+
+.btn-hamburger:hover {
+  background: rgba(20, 44, 90, 0.75);
+  border-color: rgba(96, 165, 250, 0.35);
+  transform: none;
+  filter: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30);
+}
+
+/* ── sidebar close button ─────────────────────────────────── */
+.btn-sidebar-close {
+  align-self: flex-end;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(140, 200, 255, 0.18);
+  box-shadow: none;
+  border-radius: 50%;
+  margin-bottom: 4px;
+}
+
+.btn-sidebar-close:hover {
+  background: rgba(253, 164, 175, 0.18);
+  border-color: rgba(253, 164, 175, 0.38);
+  transform: none;
+  filter: none;
+  box-shadow: none;
 }
 
 .chat-main {
@@ -596,4 +740,89 @@ button:focus-visible {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ── prevent horizontal overflow ──────────────────────────── */
+html { overflow-x: hidden; }
+
+/* ── performance hints ────────────────────────────────────── */
+.glass-shell { contain: layout style; }
+
+/* ── responsive: tablet (769 – 1024px) ───────────────────── */
+@media (max-width: 1024px) {
+  .app-shell { margin: 12px auto; }
+}
+
+/* ── responsive: mobile (≤ 768px) ────────────────────────── */
+@media (max-width: 768px) {
+  /* Full-bleed shell — no wasted margin on small screens */
+  .app-shell {
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Chat card fills full viewport edge-to-edge */
+  .chat-shader-wrap { border-radius: 0; }
+
+  /* Kill the WebGL shader on mobile — saves battery and eliminates jank */
+  .chat-shader-canvas-box { display: none; }
+
+  .glass-shell { border-radius: 0; }
+
+  .chat-layout {
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  /* Sidebar drawer is narrower and flush on mobile */
+  .chat-sidebar {
+    width: 82vw;
+    max-width: 300px;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  }
+
+  .chat-main {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .top-nav { flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 4px; }
+  .top-nav-actions { gap: 6px; flex-wrap: wrap; }
+  .nav-pill, .btn-logout { padding: 5px 11px; font-size: 0.78rem; }
+
+  /* Wider bubbles on narrow screens */
+  .message-bubble { max-width: 90%; }
+
+  /* 16 px prevents iOS from auto-zooming on input focus */
+  input, textarea { font-size: 16px; }
+
+  /* Auth pages — card stays inside viewport with a safe margin */
+  .auth-shell {
+    max-width: calc(100vw - 32px);
+    margin: 5vh auto 0;
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ── responsive: small mobile (≤ 480px) ──────────────────── */
+@media (max-width: 480px) {
+  /* Auth card goes full-bleed */
+  .auth-shell {
+    max-width: 100%;
+    margin: 0;
+    min-height: 100svh;
+    min-height: 100dvh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Tighter title on very small screens */
+  .page-title { font-size: 1.3rem; }
+
+  /* Shrink report drawer so it doesn't fill the screen */
+  .report-drawer { max-height: 55vh; }
 }
