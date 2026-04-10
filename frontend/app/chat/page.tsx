@@ -161,6 +161,7 @@ export default function ChatPage() {
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [thinking, setThinking] = useState(false);
   const timelineRef = useRef<HTMLElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
@@ -279,8 +280,10 @@ export default function ChatPage() {
     if (!token || !sessionId || !userText.trim()) return;
     setMessages((prev) => [...prev, { role: "user", agent: "user", content: userText }]);
     setInput("");
+    setThinking(true);
     try {
       const res = await chatApi.send(token, sessionId, userText);
+      setThinking(false);
       setMessages((prev) => [...prev, ...res.messages]);
       const question = res.waiting_for_hitl ? res.hitl_question : "";
       setHitlQuestion(question);
@@ -296,6 +299,7 @@ export default function ChatPage() {
       }
       void refreshSessionList();
     } catch (e) {
+      setThinking(false);
       setError(e instanceof Error ? e.message : "Message failed");
     }
   };
@@ -304,9 +308,14 @@ export default function ChatPage() {
     const token = localStorage.getItem("token");
     const answerText = overrideText ?? hitlAnswer;
     if (!token || !sessionId || !answerText.trim()) return;
+    // Show the user's answer immediately — don't wait for the AI response
+    setMessages((prev) => [...prev, { role: "user", agent: "user", content: answerText }]);
+    setHitlAnswer("");
+    setThinking(true);
     try {
       const res = await chatApi.hitl(token, sessionId, answerText);
-      setMessages((prev) => [...prev, { role: "user", agent: "user", content: answerText }, ...res.messages]);
+      setThinking(false);
+      setMessages((prev) => [...prev, ...res.messages]);
       const question = res.waiting_for_hitl ? res.hitl_question : "";
       setHitlQuestion(question);
       updateSessionHitlState(res.waiting_for_hitl, question);
@@ -319,9 +328,9 @@ export default function ChatPage() {
           /* keep prior report if any */
         }
       }
-      setHitlAnswer("");
       void refreshSessionList();
     } catch (e) {
+      setThinking(false);
       setError(e instanceof Error ? e.message : "HITL failed");
     }
   };
@@ -461,6 +470,18 @@ export default function ChatPage() {
                   </div>
                 </article>
               ))}
+
+              {/* Typing indicator — shown while the AI is processing */}
+              {thinking && (
+                <article className="message-row">
+                  <div className="message-bubble typing-bubble">
+                    <div className="message-meta">AI Doctor</div>
+                    <span className="typing-dots">
+                      <span /><span /><span />
+                    </span>
+                  </div>
+                </article>
+              )}
             </section>
             {showScrollBtn && (
               <button className="btn-scroll-bottom" onClick={scrollToBottom} aria-label="Scroll to bottom">
