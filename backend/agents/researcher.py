@@ -42,7 +42,7 @@ def run_researcher(
     realtime_query = _is_realtime_query(query)
     if realtime_query:
         query = _augment_realtime_query(query)
-    include_domains = _choose_include_domains(medical_only=medical_only, realtime_query=realtime_query)
+    include_domains = _choose_include_domains(realtime_query=realtime_query)
     tavily_results = _tavily_search(
         query,
         include_domains=include_domains,
@@ -62,11 +62,9 @@ def run_researcher(
 
 
 def tavily_search_results(query: str, medical_only: bool = True) -> list[dict]:
-    include_domains = TRUSTED_DOMAINS if medical_only else None
     realtime_query = _is_realtime_query(str(query))
     effective_query = _augment_realtime_query(str(query)) if realtime_query else str(query)
-    if realtime_query:
-        include_domains = NEWS_OUTBREAK_DOMAINS
+    include_domains = _choose_include_domains(realtime_query=realtime_query)
     return _tavily_search(
         effective_query,
         include_domains=include_domains,
@@ -79,17 +77,6 @@ def firecrawl_scrape_content(url: str) -> str:
         return ""
     return _firecrawl_scrape(str(url))
 
-
-TRUSTED_DOMAINS = [
-    "mayoclinic.org",
-    "nih.gov",
-    "pubmed.ncbi.nlm.nih.gov",
-    "webmd.com",
-    "medlineplus.gov",
-    "uptodate.com",
-    "cdc.gov",
-    "who.int",
-]
 
 NEWS_OUTBREAK_DOMAINS = [
     "who.int",
@@ -104,11 +91,25 @@ NEWS_OUTBREAK_DOMAINS = [
     "dhakatribune.com",
 ]
 
+# Sites that add no clinical value and pollute results
+EXCLUDE_DOMAINS = [
+    "pinterest.com",
+    "reddit.com",
+    "quora.com",
+    "youtube.com",
+    "tiktok.com",
+    "facebook.com",
+    "instagram.com",
+    "twitter.com",
+    "x.com",
+]
+
 
 @traceable(name="tavily_search", run_type="tool")
 def _tavily_search(
     query: str,
     include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
     realtime_query: bool = False,
 ) -> list[dict]:
     try:
@@ -119,24 +120,28 @@ def _tavily_search(
             return []
 
         client = TavilyClient(api_key=api_key)
-        search_kwargs = {
+        search_kwargs: dict = {
             "query": query,
             "search_depth": "advanced",
-            "max_results": 6,
+            "max_results": 8,
         }
         if realtime_query:
             search_kwargs["topic"] = "news"
             search_kwargs["days"] = 7
+        # Only restrict to specific domains when explicitly asked (e.g. news queries)
         if include_domains:
             search_kwargs["include_domains"] = include_domains
+        # Always exclude low-signal social/video sites
+        search_kwargs["exclude_domains"] = exclude_domains or EXCLUDE_DOMAINS
 
         try:
             response = client.search(**search_kwargs)
         except TypeError:
-            fallback_kwargs = {
+            # Older tavily-python versions don't accept exclude_domains — fall back gracefully
+            fallback_kwargs: dict = {
                 "query": query,
                 "search_depth": "advanced",
-                "max_results": 6,
+                "max_results": 8,
             }
             if include_domains:
                 fallback_kwargs["include_domains"] = include_domains
@@ -219,9 +224,10 @@ def _augment_realtime_query(query: str) -> str:
     return f"{q} latest update today 2026 official report"
 
 
-def _choose_include_domains(medical_only: bool, realtime_query: bool) -> list[str] | None:
+def _choose_include_domains(realtime_query: bool) -> list[str] | None:
+    # Only restrict domains for news/outbreak queries where source credibility is critical.
+    # For regular medical searches we let Tavily rank freely — whitelisting a small set of
+    # sites was blocking relevant results from the wider medical web.
     if realtime_query:
         return NEWS_OUTBREAK_DOMAINS
-    if medical_only:
-        return TRUSTED_DOMAINS
     return None
