@@ -37,7 +37,10 @@ services:
       LOG_LEVEL: "DEBUG"
       DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/myaidoctor"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-me}"
-      CORS_ALLOW_ORIGINS: "http://localhost:3000"
+      # Comma-separated. Add your deployed frontend origin(s) here.
+      # For local dev: http://localhost:3000
+      # For production: set CORS_ALLOW_ORIGINS in your server environment to your real frontend URL.
+      CORS_ALLOW_ORIGINS: "http://localhost:3000,http://20.197.0.41:3000"
       WATCHFILES_FORCE_POLLING: "true"
       LOCAL_DEMO: "${LOCAL_DEMO:-0}"
       # Host proxy (often http://127.0.0.1:...) breaks Groq/OpenAI from inside the container (connection refused).
@@ -69,7 +72,9 @@ services:
       backend:
         condition: service_started
     environment:
-      NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
+      # Frontend will call this base URL from the user's browser.
+      # In production, this must be reachable from the public internet.
+      NEXT_PUBLIC_API_BASE_URL: "http://20.197.0.41:8000"
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
       NEXT_TELEMETRY_DISABLED: "1"
