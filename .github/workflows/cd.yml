@@ -1,0 +1,53 @@
+name: CD
+
+# Runs automatically after CI succeeds on main, or manually via workflow_dispatch.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    # For workflow_run: only deploy if CI passed. workflow_dispatch always runs.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    environment: production
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "==> Pulling latest code"
+            git pull origin main
+
+            echo "==> Rebuilding and restarting containers"
+            docker compose pull --quiet 2>/dev/null || true
+            docker compose up --build -d --remove-orphans
+
+            echo "==> Waiting for backend health"
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+                echo "Backend is healthy"
+                break
+              fi
+              echo "  attempt $i/30 — waiting 5s"
+              sleep 5
+            done
+
+            echo "==> Pruning unused Docker images"
+            docker image prune -f
+
+            echo "==> Deploy complete"
