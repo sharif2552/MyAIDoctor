@@ -108,18 +108,6 @@ class RotatingGroqLLM:
             _COOLDOWN_SECONDS,
         )
 
-    @staticmethod
-    def _rotate() -> bool:
-        """Advance _groq_current_idx to the next available key. Returns False if none."""
-        global _groq_current_idx
-        n = len(_groq_cooldown_until) or 1          # at least current key tracked
-        total = _groq_cooldown_until.__class__       # not used, just for clarity
-
-        # Check every key in round-robin order
-        num_clients = len(_groq_cooldown_until) if _groq_cooldown_until else 1
-        # We'll use the module-level key count indirectly through _clients
-        return False  # will be overridden below
-
     # -- public interface ------------------------------------------------------
 
     def invoke(self, messages, **kwargs):
@@ -127,7 +115,7 @@ class RotatingGroqLLM:
 
         last_exc: Exception | None = None
 
-        for attempt in range(self._key_count):
+        for _attempt in range(self._key_count):
             idx = _groq_current_idx
 
             if not self._is_available(idx):
