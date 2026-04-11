@@ -1,5 +1,5 @@
 # MyAIDoctor — Multi-Agent Medical Diagnostic System
-
+ 
 An AI-powered diagnostic assistant built on a **LangGraph Reflexion loop** with three specialised agents — a Diagnostic Lead, a Skeptical Specialist, and a Clinical Researcher. Users describe their symptoms in a chat interface and receive a structured differential diagnosis, evidence-backed treatment options, and a final medical report sourced from trusted clinical databases.
 
 > **Disclaimer:** MyAIDoctor is an educational simulation tool. It does not replace professional medical advice, diagnosis, or treatment. Always consult a licensed healthcare provider.
