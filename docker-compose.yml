@@ -40,7 +40,8 @@ services:
       # Comma-separated. Add your deployed frontend origin(s) here.
       # For local dev: http://localhost:3000
       # For production: set CORS_ALLOW_ORIGINS in your server environment to your real frontend URL.
-      CORS_ALLOW_ORIGINS: "http://localhost:3000,http://20.197.0.41:3000"
+      # Include :80 origins when using the nginx service (same host, no port in browser URL).
+      CORS_ALLOW_ORIGINS: "http://localhost,http://localhost:3000,http://127.0.0.1,http://127.0.0.1:3000,http://20.197.0.41,http://20.197.0.41:3000"
       WATCHFILES_FORCE_POLLING: "true"
       LOCAL_DEMO: "${LOCAL_DEMO:-0}"
       # Host proxy (often http://127.0.0.1:...) breaks Groq/OpenAI from inside the container (connection refused).
@@ -59,8 +60,21 @@ services:
     volumes:
       - ./:/app
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Optional: omit host mapping and use only nginx:80 for a single public port.
     ports:
       - "8000:8000"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: myaidoctor-nginx
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     restart: unless-stopped
 
   frontend:
@@ -72,9 +86,9 @@ services:
       backend:
         condition: service_started
     environment:
-      # Frontend will call this base URL from the user's browser.
-      # In production, this must be reachable from the public internet.
-      NEXT_PUBLIC_API_BASE_URL: "http://20.197.0.41:8000"
+      # Default /api: use the app at http://<host>/ (nginx port 80). To use http://<host>:3000 instead,
+      # set NEXT_PUBLIC_API_BASE_URL in .env to http://<host>/api so the browser hits nginx on :80.
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-/api}"
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
       NEXT_TELEMETRY_DISABLED: "1"

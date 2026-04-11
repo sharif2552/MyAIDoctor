@@ -17,9 +17,13 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed CORS origins.
     # Examples:
     # - "http://localhost:3000"
-    # - "http://20.197.0.41:3000,https://your-domain.com"
+    # - "http://your-host" (nginx on :80) and "http://your-host:3000" (direct Next dev)
     # - "*" (not recommended for production when allow_credentials=True)
-    cors_allow_origins: str = "http://localhost:3000,http://20.197.0.41:3000"
+    cors_allow_origins: str = (
+        "http://localhost,http://localhost:3000,"
+        "http://127.0.0.1,http://127.0.0.1:3000,"
+        "http://20.197.0.41,http://20.197.0.41:3000"
+    )
 
 
 settings = Settings()
