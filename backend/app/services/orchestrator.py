@@ -261,10 +261,7 @@ def run_diagnostic_flow(
         for raw in graph.stream(initial_state, config=config, stream_mode="updates"):
             event = raw
             if isinstance(raw, tuple):
-                if len(raw) == 2:
-                    event = raw[-1]
-                elif len(raw) == 3:
-                    event = raw[-1]
+                event = raw[-1]
             if not isinstance(event, dict):
                 continue
             extra, q = extract_interrupt_from_stream_event(event)

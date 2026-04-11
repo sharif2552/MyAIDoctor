@@ -1,8 +1,3 @@
-# If you see "error getting credentials" on build, either fix ~/.docker/config.json
-# (remove credsStore) or run from repo root:
-#   export DOCKER_CONFIG="$(pwd)/docker/minimal-client-config"
-#   docker compose -f docker-compose.yml up --build
-# Or: bash scripts/docker-compose.sh up --build
 services:
   postgres:
     image: postgres:16-alpine
@@ -21,9 +16,6 @@ services:
       timeout: 5s
       retries: 20
 
-  # Migrations (from repo root on host): docker compose exec backend alembic upgrade head
-  # If tables already exist but alembic never ran: alembic stamp 0001_init && alembic upgrade head
-  # Or use: docker compose exec backend sh scripts/alembic-docker.sh upgrade head
   backend:
     build:
       context: .
@@ -37,14 +29,9 @@ services:
       LOG_LEVEL: "DEBUG"
       DATABASE_URL: "postgresql+psycopg://postgres:postgres@postgres:5432/myaidoctor"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY:-change-me}"
-      # Comma-separated. Add your deployed frontend origin(s) here.
-      # For local dev: http://localhost:3000
-      # For production: set CORS_ALLOW_ORIGINS in your server environment to your real frontend URL.
-      # Include :80 origins when using the nginx service (same host, no port in browser URL).
       CORS_ALLOW_ORIGINS: "http://localhost,http://localhost:3000,http://127.0.0.1,http://127.0.0.1:3000,http://20.197.0.41,http://20.197.0.41:3000,https://seliseproject.sharifsdevlab.me"
       WATCHFILES_FORCE_POLLING: "true"
       LOCAL_DEMO: "${LOCAL_DEMO:-0}"
-      # Host proxy (often http://127.0.0.1:...) breaks Groq/OpenAI from inside the container (connection refused).
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
       ALL_PROXY: ""
@@ -60,7 +47,6 @@ services:
     volumes:
       - ./:/app
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
-    # Optional: omit host mapping and use only nginx:80 for a single public port.
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -86,7 +72,6 @@ services:
     volumes:
       - certbot-certs:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-    # Renew certificates every 12 hours (Let's Encrypt certs expire in 90 days)
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'"
 
   frontend:
@@ -98,8 +83,6 @@ services:
       backend:
         condition: service_started
     environment:
-      # Default /api: use the app at http://<host>/ (nginx port 80). To use http://<host>:3000 instead,
-      # set NEXT_PUBLIC_API_BASE_URL in .env to http://<host>/api so the browser hits nginx on :80.
       NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-/api}"
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"

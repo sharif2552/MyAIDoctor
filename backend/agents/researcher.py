@@ -128,7 +128,6 @@ def _tavily_search(
         if realtime_query:
             search_kwargs["topic"] = "news"
             search_kwargs["days"] = 7
-        # Only restrict to specific domains when explicitly asked (e.g. news queries)
         if include_domains:
             search_kwargs["include_domains"] = include_domains
         # Always exclude low-signal social/video sites

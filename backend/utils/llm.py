@@ -91,8 +91,6 @@ class RotatingGroqLLM:
         self._clients = clients          # list[ChatGroq]
         self._key_count = key_count
 
-    # -- internal helpers -----------------------------------------------------
-
     @staticmethod
     def _current_idx() -> int:
         return _groq_current_idx
@@ -109,8 +107,6 @@ class RotatingGroqLLM:
             idx + 1,
             _COOLDOWN_SECONDS,
         )
-
-    # -- public interface ------------------------------------------------------
 
     def invoke(self, messages: Any, **kwargs: Any) -> Any:
         global _groq_current_idx
@@ -155,9 +151,6 @@ class RotatingGroqLLM:
         raise RuntimeError(
             f"Exhausted all {self._key_count} Groq key rotation attempts."
         ) from last_exc
-
-    def try_rotate(self) -> None:
-        self._try_rotate()
 
     def _try_rotate(self) -> bool:
         global _groq_current_idx

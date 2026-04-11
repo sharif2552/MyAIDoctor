@@ -24,8 +24,6 @@ app.add_middleware(
 
 @app.options('/{rest_of_path:path}')
 def preflight_handler(rest_of_path: str):
-    # CORSMiddleware normally handles this, but this makes it obvious in logs
-    # and avoids "No content available for preflight request" confusion.
     return Response(status_code=200)
 
 
