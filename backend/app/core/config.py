@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
 
-    cors_allow_origins: str = "http://localhost:3000"
+    # Comma-separated list of allowed CORS origins.
+    # Examples:
+    # - "http://localhost:3000"
+    # - "http://20.197.0.41:3000,https://your-domain.com"
+    # - "*" (not recommended for production when allow_credentials=True)
+    cors_allow_origins: str = "http://localhost:3000,http://20.197.0.41:3000"
 
 
 settings = Settings()
