@@ -29,10 +29,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email.lower()).first()
-    try:
-        valid = bool(user) and verify_password(payload.password, user.password_hash)
-    except ValueError:
-        valid = False
-    if not valid:
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    try:
+        if not verify_password(payload.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid credentials") from None
     return TokenResponse(access_token=create_access_token(str(user.id)))

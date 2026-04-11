@@ -1,7 +1,7 @@
 import json
 from uuid import UUID
 
-from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.errors import GraphInterrupt
 from langsmith import traceable
@@ -198,7 +198,9 @@ def run_toolcalling_research(query: str) -> tuple[str, list[dict]]:
     tools = [tavily_search, firecrawl_scrape]
     tool_map = {t.name: t for t in tools}
     bound_llm = llm.bind_tools(tools)
-    messages = [HumanMessage(content=f"Research this query and summarize with sources: {query}")]
+    messages: list[BaseMessage] = [
+        HumanMessage(content=f"Research this query and summarize with sources: {query}")
+    ]
     captured: list[dict] = []
 
     for _ in range(5):

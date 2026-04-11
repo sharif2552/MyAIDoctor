@@ -1,11 +1,13 @@
 # ruff: noqa: B008
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Command
 from langsmith import get_current_run_tree, traceable
+from langsmith.run_helpers import LangSmithExtra
 from langsmith.run_trees import RunTree
 from sqlalchemy.orm import Session
 
@@ -305,19 +307,21 @@ def resume_hitl(
     graph = get_graph()
     config = {"configurable": {"thread_id": session.thread_id}}
 
-    langsmith_extra: dict[str, Any] = {}
+    langsmith_extra: LangSmithExtra | None = None
     if session.langsmith_run_id:
         try:
             parent = RunTree(
                 name="chat_message",
                 run_type="chain",
-                id=session.langsmith_run_id,
+                id=UUID(session.langsmith_run_id.strip()),
             )
-            langsmith_extra = {"parent": parent}
-        except Exception:
+            langsmith_extra = LangSmithExtra(parent=parent)
+        except (ValueError, TypeError):
             pass
 
-    traced = run_chat_hitl_traced(db, session, payload, graph, config, langsmith_extra=langsmith_extra)
+    traced = run_chat_hitl_traced(
+        db, session, payload, graph, config, langsmith_extra=langsmith_extra
+    )
     out = traced["assistant_messages"]
     waiting = traced["waiting_for_hitl"]
     question = traced["hitl_question"]

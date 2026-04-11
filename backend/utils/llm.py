@@ -22,8 +22,10 @@ from __future__ import annotations
 import json
 import os
 import time
+from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import SecretStr
 
 from backend.utils.logging import get_logger
 
@@ -110,7 +112,7 @@ class RotatingGroqLLM:
 
     # -- public interface ------------------------------------------------------
 
-    def invoke(self, messages, **kwargs):
+    def invoke(self, messages: Any, **kwargs: Any) -> Any:
         global _groq_current_idx
 
         last_exc: Exception | None = None
@@ -154,7 +156,7 @@ class RotatingGroqLLM:
             f"Exhausted all {self._key_count} Groq key rotation attempts."
         ) from last_exc
 
-    def try_rotate(self):
+    def try_rotate(self) -> None:
         self._try_rotate()
 
     def _try_rotate(self) -> bool:
@@ -276,7 +278,7 @@ def get_llm(temperature: float = 0.2):
                 ChatGroq(
                     model="llama-3.3-70b-versatile",
                     temperature=temperature,
-                    api_key=key,
+                    api_key=SecretStr(key),
                 )
                 for key in groq_keys
             ]
